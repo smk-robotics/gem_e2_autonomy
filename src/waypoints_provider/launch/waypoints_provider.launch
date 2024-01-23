@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<launch>
+    <arg name="start_delay"             default="1.0"/>
+    <arg name="waypoints_csv_file_path" default="$(find waypoints_provider)/data/waypoints.csv"/>
+    <arg name="output/path"             default="path"/>
+    <arg name="output/planning_goal"    default="goal"/>
+
+    <node name="waypoints_provider" pkg="waypoints_provider" type="waypoints_provider" output="screen"
+          launch-prefix="bash -c 'sleep $(arg start_delay); $0 $@' ">
+        <param name="waypoints_file" value="$(arg waypoints_csv_file_path)"/>
+        <remap from="~output/path"          to="$(arg output/path)"/>
+        <remap from="~output/planning_goal" to="$(arg output/planning_goal)"/>
+    </node>
+</launch>

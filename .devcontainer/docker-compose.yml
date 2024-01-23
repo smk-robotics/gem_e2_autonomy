@@ -1,0 +1,22 @@
+version: '3'
+services:
+  gem_e2_autonomy_ws_dev:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    privileged: true
+    tty: true
+    network_mode: "host"
+    volumes:
+      - ..:/workspace/dev_container
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    environment:
+      - QT_X11_NO_MITSHM=1
+      - DISPLAY=${DISPLAY}
+      - NVIDIA_DRIVER_CAPABILITIES=video,compute,utility,graphics
+      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - capabilities: [ gpu ]

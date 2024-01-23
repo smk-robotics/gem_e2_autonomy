@@ -1,0 +1,30 @@
+// NOTE: for "devcontainer.json" it is permitted to have JSON comments.
+// Ignore error:521 if VS Code complains.
+
+// For format details, see https://aka.ms/devcontainer.json. For config options, see the README at:
+// https://github.com/microsoft/vscode-dev-containers/tree/v0.205.2/containers/ubuntu
+{
+	"name": "gem_e2_autonomy_ws_dev",
+	// Update the 'dockerComposeFile' list if you have more compose files or use different names.
+	"dockerComposeFile": [
+		"docker-compose.yml"
+	],
+	"service": "gem_e2_autonomy_ws_dev",
+	"runServices": ["gem_e2_autonomy_ws_dev"],
+	"workspaceFolder": "/workspace/dev_container",
+
+	// Set *default* container specific settings.json values on container create.
+	"settings": {},
+
+	// Add the IDs of extensions you want installed when the container is created.
+	"extensions": [
+		"ms-vscode.cpptools",
+		"ms-vscode.cmake-tools",
+		"ms-vscode.cpptools-extension-pack",
+		"ms-python.python",
+		"ms-iot.vscode-ros@0.8.0",
+		"edonet.vscode-command-runner"
+	],
+
+	"initializeCommand": "xhost +local:docker"
+}

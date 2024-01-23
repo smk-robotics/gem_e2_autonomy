@@ -1,0 +1,52 @@
+<?xml version="1.0"?>
+<launch>
+    <param name="/use_sim_time" value="true"/>
+
+    <include file="$(find gem_gazebo)/launch/gem_gazebo_rviz.launch">
+        <arg name="velodyne_points" value="true"/>
+    </include>
+    <include file="$(find gem_gazebo)/launch/gem_sensor_info.launch"/>
+
+    <node name="pointcloud_adapter" pkg="pointcloud_adapter" type="pointcloud_adapter.py" required="true">
+        <param name="output_frame_id" value="velodyne"/>
+        <remap from="input/pointcloud"  to="/gem/velodyne_points"/>
+        <remap from="output/pointcloud" to="/gem/velodyne_points_correct"/>
+    </node>
+
+    <node pkg="gem_lanenet" type="gem_odom_tf2_broadcaster.py" name="odom_tf2_broadcaster" output="screen">
+        <param name="robot_name" value="gem"/>
+        <remap from="/base_footprint/odom" to="/gem/base_footprint/odom"/>
+    </node>
+
+    <node pkg="tf2_ros" type="static_transform_publisher" name="map_to_odom_publisher" args="0 0 0 0 0 0 map odom" />
+
+    <node pkg="move_base" type="move_base" respawn="false" name="move_base" 
+          output="screen" required="true" clear_params="true">
+  	  	<rosparam file="$(find basic_autonomy)/config/costmap_common_params.yaml" command="load" ns="global_costmap"/>
+  	 	<rosparam file="$(find basic_autonomy)/config/costmap_common_params.yaml" command="load" ns="local_costmap"/>
+  		<rosparam file="$(find basic_autonomy)/config/local_costmap_params.yaml"  command="load"/>
+  		<rosparam file="$(find basic_autonomy)/config/global_costmap_params.yaml" command="load"/>
+  		<rosparam file="$(find basic_autonomy)/config/teb_local_planner_params.yaml" command="load"/>
+
+		<param name="base_global_planner"       value="global_planner/GlobalPlanner"/>
+        <!-- <param name="base_global_planner"                  value="waypoint_global_planner/WaypointGlobalPlanner"/> -->
+	    <param name="planner_frequency"                    value="1.0"/>
+		<param name="planner_patience"                     value="5.0"/>
+        <param name="WaypointGlobalPlanner/waypoints_file" value="$(find basic_autonomy)/config/wps.csv"/>
+		<param name="base_local_planner"                   value="teb_local_planner/TebLocalPlannerROS"/>
+		<param name="controller_frequency"                 value="5.0"/>
+		<param name="controller_patience"                  value="15.0"/>
+        <param name="clearing_rotation_allowed"            value="false"/>
+        <remap from="/cmd_vel" to="/gem/cmd_vel"/>
+	</node>
+
+    <node name="map_server" pkg="map_server" type="map_server" args="$(find basic_autonomy)/config/empty_map.yaml" output="screen">
+        <param name="frame_id" value="map"/>
+	</node>
+
+    <include file="$(find waypoints_provider)/launch/waypoints_provider.launch">
+        <arg name="start_delay"          value="3.0"/>
+        <arg name="output/path"          value="/move_base/TebLocalPlannerROS/via_points"/>
+        <arg name="output/planning_goal" value="/move_base_simple/goal"/>
+    </include>
+</launch>
