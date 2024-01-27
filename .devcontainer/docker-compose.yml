@@ -4,6 +4,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - USERNAME=${USER}
     privileged: true
     tty: true
     network_mode: "host"

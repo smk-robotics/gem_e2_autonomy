@@ -26,5 +26,7 @@
 		"edonet.vscode-command-runner"
 	],
 
-	"initializeCommand": "xhost +local:docker"
+	"initializeCommand": "xhost +local:docker",
+	"updateContentCommand": "git submodule update --init --recursive",
+	"remoteUser": "${localEnv:USER}"
 }

@@ -1,6 +1,11 @@
 FROM osrf/ros:noetic-desktop-full
 
-USER root
+ARG USERNAME
+ARG USER_UID=1000
+ARG USER_GID=$USER_UID
+
+RUN groupadd --gid $USER_GID $USERNAME
+RUN useradd -s /bin/bash --uid $USER_UID --gid $USER_GID -m $USERNAME
 
 RUN echo '%sudo ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
 
@@ -44,5 +49,7 @@ RUN echo "source /opt/ros/${ROS_DISTRO}/setup.zsh" >> ${HOME}/.zshrc
 
 # Setup zsh shell as default shell.
 RUN chsh -s $(which zsh)
+
+USER ${USERNAME}
 
 CMD ["/usr/bin/env", "zsh"]
