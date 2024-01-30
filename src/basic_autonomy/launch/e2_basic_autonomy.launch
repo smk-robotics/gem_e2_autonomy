@@ -28,11 +28,11 @@
   		<rosparam file="$(find basic_autonomy)/config/global_costmap_params.yaml" command="load"/>
   		<rosparam file="$(find basic_autonomy)/config/teb_local_planner_params.yaml" command="load"/>
 
-		<param name="base_global_planner"       value="global_planner/GlobalPlanner"/>
-        <!-- <param name="base_global_planner"                  value="waypoint_global_planner/WaypointGlobalPlanner"/> -->
+		<!-- <param name="base_global_planner"       value="global_planner/GlobalPlanner"/> -->
+        <param name="base_global_planner"                  value="waypoint_global_planner/WaypointGlobalPlanner"/>
 	    <param name="planner_frequency"                    value="1.0"/>
 		<param name="planner_patience"                     value="5.0"/>
-        <param name="WaypointGlobalPlanner/waypoints_file" value="$(find basic_autonomy)/config/wps.csv"/>
+        <param name="WaypointGlobalPlanner/waypoints_file" value="$(find basic_autonomy)/data/waypoints.csv"/>
 		<param name="base_local_planner"                   value="teb_local_planner/TebLocalPlannerROS"/>
 		<param name="controller_frequency"                 value="5.0"/>
 		<param name="controller_patience"                  value="15.0"/>
@@ -44,9 +44,9 @@
         <param name="frame_id" value="map"/>
 	</node>
 
-    <include file="$(find waypoints_provider)/launch/waypoints_provider.launch">
+    <!-- <include file="$(find waypoints_provider)/launch/waypoints_provider.launch">
         <arg name="start_delay"          value="3.0"/>
         <arg name="output/path"          value="/move_base/TebLocalPlannerROS/via_points"/>
         <arg name="output/planning_goal" value="/move_base_simple/goal"/>
-    </include>
+    </include> -->
 </launch>

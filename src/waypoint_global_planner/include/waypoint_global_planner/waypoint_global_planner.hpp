@@ -31,11 +31,9 @@ private:
   nav_msgs::Path getPathFromCsvFile(const std::string &csv_file_path) const;
   void PublishPathMarkers(const nav_msgs::Path &path) const noexcept;
   void PublishPlanningGoal(const nav_msgs::Path &path) const noexcept;
+  nav_msgs::Path downsamplePath(const nav_msgs::Path &path, double threshold) const;
 
 private:
-  costmap_2d::Costmap2DROS* costmap_ros_;
-  costmap_2d::Costmap2D* costmap_;
-  base_local_planner::WorldModel* world_model_;
   ros::Subscriber waypoint_sub_;
   ros::Subscriber external_path_sub_;
   ros::Publisher waypoint_marker_pub_;

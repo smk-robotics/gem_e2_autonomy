@@ -1,4 +1,5 @@
 #include "waypoint_global_planner/waypoint_global_planner.hpp"
+#include <filesystem>
 #include <pluginlib/class_list_macros.h>
 #include <tf/tf.h>
 #include <nav_msgs/Path.h>
@@ -9,22 +10,18 @@ namespace waypoint_global_planner
 {
 
 WaypointGlobalPlanner::WaypointGlobalPlanner() 
-  : costmap_ros_(NULL), initialized_(false) 
+  : initialized_(false) 
 {}
 
 WaypointGlobalPlanner::WaypointGlobalPlanner(std::string name, costmap_2d::Costmap2DROS *costmap_ros)
-  : costmap_ros_(NULL),  initialized_(false)
+  : initialized_(false)
 {
   initialize(name, costmap_ros);
 }
 
-void WaypointGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS *costmap_ros)
+void WaypointGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DROS *)
 {
   if (!initialized_) {
-    costmap_ros_ = costmap_ros;
-    costmap_     = costmap_ros_->getCostmap();
-    world_model_ = new base_local_planner::CostmapModel(*costmap_);
-
     ros::NodeHandle pnh("~" + name);
 
     pnh.param("epsilon", epsilon_, 1e-1);
@@ -35,17 +32,17 @@ void WaypointGlobalPlanner::initialize(std::string name, costmap_2d::Costmap2DRO
       ROS_INFO_STREAM("[WaypointGlobalPlanner]: Waiting for waypoints_file param...");
       loop_rate.sleep();
     }
+    
+    external_path_sub_    = pnh.subscribe("external_path", 1, &WaypointGlobalPlanner::externalPathCallback, this);
+    waypoint_marker_pub_  = pnh.advertise<visualization_msgs::MarkerArray>("waypoints", 1);
+    goal_pub_             = pnh.advertise<geometry_msgs::PoseStamped>("/move_base_simple/goal", 1);
+    plan_pub_             = pnh.advertise<nav_msgs::Path>("global_plan", 1);
 
-    waypoint_sub_              = pnh.subscribe("/clicked_point", 100, &WaypointGlobalPlanner::waypointCallback, this);
-    external_path_sub_         = pnh.subscribe("external_path", 1, &WaypointGlobalPlanner::externalPathCallback, this);
-    waypoint_marker_pub_       = pnh.advertise<visualization_msgs::MarkerArray>("waypoints", 1);
-    goal_pub_                  = pnh.advertise<geometry_msgs::PoseStamped>("/move_base_simple/goal", 1);
-    plan_pub_                  = pnh.advertise<nav_msgs::Path>("global_plan", 1);
-  
     try {
       const auto waypoints_path_ = getPathFromCsvFile(waypoints_file_);
-      PublishPathMarkers(waypoints_path_);
-      PublishPlanningGoal(waypoints_path_);
+      path_ = downsamplePath(waypoints_path_, 1.0);
+      PublishPathMarkers(path_);
+      PublishPlanningGoal(path_);
     } catch (std::exception &ex) {
       ROS_ERROR("[WaypointGlobalPlanner]: %s", ex.what());
       throw;
@@ -63,11 +60,16 @@ nav_msgs::Path WaypointGlobalPlanner::getPathFromCsvFile(const std::string &csv_
     throw std::invalid_argument("[WaypointGlobalPlanner]: Given path to the csv file is empty!");
   }
 
+  if (!std::filesystem::exists(csv_file_path)) {
+    throw std::invalid_argument("[WaypointGlobalPlanner]: Can't find \"" + csv_file_path + "\" file.");
+  }
+
   std::ifstream file(csv_file_path);
 
   if (!file.is_open()) {
-    throw("[WaypointGlobalPlanner]: Failed to open CSV file: %s", csv_file_path);
+    throw std::runtime_error("[WaypointGlobalPlanner]: Failed to open CSV file: " + csv_file_path);
   }
+
 
   nav_msgs::Path path;
   path.header.stamp    = ros::Time().now();
@@ -75,44 +77,43 @@ nav_msgs::Path WaypointGlobalPlanner::getPathFromCsvFile(const std::string &csv_
   std::string line;
   
   while (std::getline(file, line)) {
-      std::istringstream iss(line);
-      std::string token;
-
-      auto x   = 0.0;
-      auto y   = 0.0; 
-      auto yaw = 0.0;
-
-      if (std::getline(iss, token, ',')) {
-        x = std::stod(token);
-      } else {
-        ROS_ERROR(
+    std::istringstream iss(line);
+    std::string token;
+    auto x = 0.0;
+    auto y = 0.0;
+    auto yaw = 0.0;
+    if (std::getline(iss, token, ',')) {
+      x = std::stod(token);
+    } else {
+      ROS_ERROR(
           "[WaypointGlobalPlanner]: Invalid CSV line. Can't get x coordinate from line: %s", line.c_str());
-        continue;
-      }
+      continue;
+    }
+    
+    if (std::getline(iss, token, ',')) {
+      y = std::stod(token);
+    } else {
+      ROS_ERROR(
+          "[WaypointGlobalPlanner]: Invalid CSV line. Can't get y coordinate from line: %s", line.c_str());
+      continue;
+    }
+    
+    if (std::getline(iss, token)) {
+      yaw = std::stod(token);
+    } else {
+      ROS_ERROR(
+          "[WaypointGlobalPlanner]: Invalid CSV line. Can't get yaw angle from line: %s", line.c_str());
+      continue;
+    }
 
-      if (std::getline(iss, token, ',')) {
-        y = std::stod(token);
-      } else {
-          ROS_ERROR(
-            "[WaypointGlobalPlanner]: Invalid CSV line. Can't get y coordinate from line: %s", line.c_str());
-        continue;
-      }
-
-      if (std::getline(iss, token)) {
-        yaw = std::stod(token);
-      } else {
-          ROS_ERROR(
-            "[WaypointGlobalPlanner]: Invalid CSV line. Can't get yaw angle from line: %s", line.c_str());
-        continue;
-      }
-
-      geometry_msgs::PoseStamped pose;
-      pose.pose.position.x  = x;
-      pose.pose.position.y  = y;
-      pose.pose.orientation = tf::createQuaternionMsgFromYaw(yaw);
-      path.poses.push_back(pose);
+    geometry_msgs::PoseStamped pose;
+    pose.header = path.header;
+    pose.pose.position.x = x;
+    pose.pose.position.y = y;
+    pose.pose.orientation = tf::createQuaternionMsgFromYaw(yaw);
+    path.poses.push_back(pose);
   }
-
+  
   file.close();
   return path;
 }
@@ -155,60 +156,36 @@ void WaypointGlobalPlanner::PublishPlanningGoal(const nav_msgs::Path &path) cons
 bool WaypointGlobalPlanner::makePlan(const geometry_msgs::PoseStamped &start_pose, 
   const geometry_msgs::PoseStamped& goal, std::vector<geometry_msgs::PoseStamped> &plan)
 {
-  const auto waypoints_path_ = getPathFromCsvFile(waypoints_file_);
-  PublishPathMarkers(waypoints_path_);
-  PublishPlanningGoal(waypoints_path_);
-  ROS_INFO("Published global plan");
-  
+  ROS_INFO("[WaypointGlobalPlanner]: Make plan called...");
   plan.clear();
 
-  for (const auto &pose : waypoints_path_.poses) {
+  for (const auto &pose : path_.poses) {
     plan.emplace_back(pose);
   }
 
-  plan_pub_.publish(waypoints_path_);
+  plan_pub_.publish(path_);
+  PublishPathMarkers(path_);
+  ROS_INFO("[WaypointGlobalPlanner]: Make plan - [OK]");
   return true;
 }
 
-
-void WaypointGlobalPlanner::waypointCallback(const geometry_msgs::PointStamped::ConstPtr& waypoint)
+nav_msgs::Path WaypointGlobalPlanner::downsamplePath(const nav_msgs::Path &path, double threshold) const
 {
-  if (clear_waypoints_) {
-    waypoints_.clear();
-    clear_waypoints_ = false;
-  }
-
-  // add waypoint to the waypoint vector
-  waypoints_.push_back(geometry_msgs::PoseStamped());
-  waypoints_.back().header = waypoint->header;
-  waypoints_.back().pose.position = waypoint->point;
-  waypoints_.back().pose.orientation.w = 1.0;
-
-  // create and publish markers
-  createAndPublishMarkersFromPath(waypoints_);
-
-  if (waypoints_.size() < 2)
-    return;
-
-  geometry_msgs::Pose *p1 = &(waypoints_.end()-2)->pose;
-  geometry_msgs::Pose *p2 = &(waypoints_.end()-1)->pose;
-
-  // calculate orientation of waypoints
-  double yaw = atan2(p2->position.y - p1->position.y, p2->position.x - p1->position.x);
-  p1->orientation = tf::createQuaternionMsgFromYaw(yaw);
-
-  // calculate distance between latest two waypoints and check if it surpasses the threshold epsilon
-  double dist = hypot(p1->position.x - p2->position.x, p1->position.y - p2->position.y);
-  if (dist < epsilon_)
+  nav_msgs::Path downsampled_path;
+  downsampled_path.header = path.header;
+  downsampled_path.poses.emplace_back(path.poses.front());
+  for (const auto &pose : path.poses)
   {
-    p2->orientation = p1->orientation;
-    path_.header = waypoint->header;
-    path_.poses.clear();
-    path_.poses.insert(path_.poses.end(), waypoints_.begin(), waypoints_.end());
-    goal_pub_.publish(waypoints_.back());
-    clear_waypoints_ = true;
-    ROS_INFO("Published goal pose");
+    const auto last_downsampled_pose = downsampled_path.poses.back();
+    const auto dx = pose.pose.position.x - last_downsampled_pose.pose.position.x;
+    const auto dy = pose.pose.position.y - last_downsampled_pose.pose.position.y;
+    const auto distance = std::hypot(dx, dy);
+    if (distance > threshold)
+    {
+      downsampled_path.poses.emplace_back(pose);
+    }
   }
+  return downsampled_path;
 }
 
 void WaypointGlobalPlanner::interpolatePath(nav_msgs::Path& path)
@@ -246,12 +223,11 @@ void WaypointGlobalPlanner::externalPathCallback(const nav_msgs::PathConstPtr& p
 {
   path_.poses.clear();
   clear_waypoints_ = true;
-  path_.header = plan->header;
-  path_.poses = plan->poses;
+  path_.header     = plan->header;
+  path_.poses      = plan->poses;
   createAndPublishMarkersFromPath(path_.poses);
   goal_pub_.publish(path_.poses.back());
 }
-
 
 void WaypointGlobalPlanner::createAndPublishMarkersFromPath(const std::vector<geometry_msgs::PoseStamped>& path)
 {
